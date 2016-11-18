@@ -53,6 +53,7 @@ public class ActiveKeyValueStore extends AbstractConnectionWatcher {
 	public String read(String path, Watcher watcher) throws InterruptedException, KeeperException {
 		
 		/** 将 ConfigWatcher 作为 watcher 注入，Stat 目的是获取元数据，这里不需要，所以设置为 null **/
+		/** 注意，这里会一直监听，直到有变化为止 **/
 		byte[] data = zk.getData( path, watcher, null/* stat */ );
 		
 		return new String(data, CHARSET);

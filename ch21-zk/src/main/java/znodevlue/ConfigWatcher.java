@@ -23,16 +23,20 @@ public class ConfigWatcher implements Watcher {
 
 	public void displayConfig() throws InterruptedException, KeeperException {
 		
-		/** this 作为回调的 Watcher **/
+		/** this 作为回调的 Watcher; 注意，这里会一直监听，知道有变化为止 **/
 		String value = store.read( ConfigUpdater.PATH, this );
 		
 		System.out.printf("Read %s as %s\n", ConfigUpdater.PATH, value);
 		
 	}
 
+	/**
+	 * 一旦有变化，监听终止，所以，如果需要继续监听，则需要调用代码继续侦听...
+	 */
 	@Override
 	public void process(WatchedEvent event) {
 		
+		// 如果没有变化，则继续监听
 		if (event.getType() == EventType.NodeDataChanged) {
 			
 			try {

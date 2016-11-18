@@ -61,9 +61,10 @@ public class TestBasicZooKeeperBehaviors {
 			
 		}
 		
-			
+		
+		// 临时节点必须创建在永久节点之下，创建一个临时节点
 		try {
-			// 临时节点必须创建在永久节点之下
+			
 			keeper.create("/test/sample", null, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL );
 			
 		} catch (KeeperException e) {
@@ -71,6 +72,19 @@ public class TestBasicZooKeeperBehaviors {
 			e.printStackTrace();
 			
 			Assert.assertFalse("no exception there, must create success", true );
+			
+		}
+
+		// 临时节点必须创建在永久节点之下，追加一个临时节点
+		try {
+			
+			keeper.create("/test/sample/sample0", null, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL );
+			
+		} catch (KeeperException e) {
+			
+			e.printStackTrace();
+			
+			Assert.assertTrue("报错，不能追加创建临时节点...", true );
 			
 		}
 		
@@ -83,7 +97,7 @@ public class TestBasicZooKeeperBehaviors {
 			
 			e.printStackTrace();
 			
-			Assert.assertTrue(" 一次不能创建多级临时节点 ~~~~", true);
+			Assert.assertTrue("报错，一次不能创建多级临时节点 ~~~~", true);
 		}
 		
 	}
