@@ -4,29 +4,49 @@ import java.util.List;
 
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.recipes.lock.ProtocolSupport;
 import org.apache.zookeeper.recipes.lock.ZooKeeperOperation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * 区别于 WriteLock，OneLock 同一时间只允许一个 Client 节点获得锁，其它节点试图获得锁，立马失败；WriteLock 是一种排队机制，轮换的来获得对资源的锁。
- * 
- * 应用场景，Scheduler，比如，每晚定期对 Order 进行超时自动收货动作，当在一个分布式应用场景下，多个节点都有相同的 Scheduler 实例，那么这个时候，需要保证只有一个 Scheduler 执行一次即可， 其它 Scheduler 试图执行，执行失败返回。 
+ * 为了解决 OneLock0 遗留下来的问题，分别创建永久的 root path 和 临时的 leaf path
  * 
  * @author 商洋
  *
+ * @createTime：Nov 18, 2016 12:23:26 PM
  */
 public class OneLock extends ProtocolSupport{
 	
-	String path;
+	private static final Logger logger = LoggerFactory.getLogger(OneLock.class);
+	
+	String rootPath;
+	
+	String leafPath = "lock"; // default name, could be modified by the setter method.
+	
+	List<ACL> acls = ZooDefs.Ids.OPEN_ACL_UNSAFE;
 	
 	public OneLock( ZooKeeper keeper, String path ){
 		
 		super( keeper );
 		
-		this.path = path;
+		this.rootPath = path;
+		
+	}
+	
+	public void setLeafPath( String path ){
+		
+		this.leafPath = path;
+		
+	}
+	
+	public String getPath(){
+		
+		return rootPath + "/" + leafPath;
 		
 	}
 	
@@ -35,34 +55,80 @@ public class OneLock extends ProtocolSupport{
 	 * @throws KeeperException 
 	 * @throws InterruptedException 
 	 */
-	public boolean lock() throws KeeperException, InterruptedException{
+	public boolean lock() throws InterruptedException{
+		// 1. 创建永久的根节点
+		RootNodeOperation rop = new RootNodeOperation();
+		
+		try {
+			
+			retryOperation( rop );
+			
+		} catch (KeeperException e) {
 
-		OneLockOperation operation = new OneLockOperation( super.getAcl() );
+			logger.info( e.getMessage() );
+			
+		}
+		
+		// 2. 创建永久的子节点 -> 锁
+		OneLockOperation oop = new OneLockOperation();
 
 		try {
 			
 			// 分布式环境中，需要 retry 的机制，因为，分布式环境中，我们编程的前提是，认为网络是不可靠的....
-			retryOperation( operation );
-			
-			return operation.getLocked();
+			retryOperation( oop );
 			
 		} catch (KeeperException e) {
 			
-			throw e;
+			// 为什么是 info? 因为 KeeperException 是期望发生的；因为并发情况下，只允许一个线程能够成功创建子节点，其它的节点会报错，返回；
+			logger.info( e.getMessage() );
 			
-		} catch (InterruptedException e) {
-			
-			throw e;
-			
-		}		
+		}	
+		
+		return oop.isLocked();
 	
 	}
 	
-	public void unlock(){
+	public void unlock() throws KeeperException, InterruptedException {
+		
+		retryOperation( new ZooKeeperOperation(){
+
+			@Override
+			public boolean execute() throws KeeperException, InterruptedException {
+
+				zookeeper.delete( getPath(), -1 ); // 删除节点，既是释放锁
+				
+				return true; // 执行成功，终止 retry.
+			}
+			
+		});
+
 		
 	}
 	
-	public void close(){
+	/**
+	 * 创建永久根节点；在分布式并发的环境下，保证有且仅有一个 Client 成功创建了 root 节点即可。
+	 * 
+	 * @author 商洋
+	 *
+	 * @createTime：Nov 18, 2016 2:09:29 PM
+	 */
+	class RootNodeOperation implements ZooKeeperOperation{
+
+		@Override
+		public boolean execute() throws KeeperException, InterruptedException {
+			
+			Stat stat = zookeeper.exists(rootPath, false);
+			
+			if( stat == null ){
+				
+				// 并发创建的情况下，如果 rootpath 对应的节点已经存在，则会抛出一个 Keeper Exception
+				zookeeper.create( rootPath, null, acls, CreateMode.PERSISTENT );
+				
+			}
+			
+			return true;
+				
+		}
 		
 	}
 	
@@ -70,21 +136,23 @@ public class OneLock extends ProtocolSupport{
 		
 		boolean locked;
 		
-		List<ACL> acls;
-		
-		public OneLockOperation( List<ACL> acls ){
-			
-			this.acls = acls;
-		}
-		
 		@Override
 		public boolean execute() throws KeeperException, InterruptedException {
 			
-	        Stat stat = zookeeper.exists( path, false );
+			String path = rootPath + "/" + leafPath;
+			
+			logger.debug(" start to retrive the lock; path:"+path+"; zookeeper:" + zookeeper.toString() );			
+			
+	        Stat stat = zookeeper.exists( getPath(), false );
+	        
+	        System.out.println( "Stat:" + ( stat == null ? "null" : stat.toString() ) );
 	        
 	        if( stat == null ){
-	        
+	        	
+	        	// 如果 path 对应的 znode 对象已经存在，则会抛出一个 KeeperException..
 	        	zookeeper.create( path, null, acls, CreateMode.EPHEMERAL );
+	        	
+	        	logger.info(" the znode "+path+" created successful" );
 	        	
 	        	locked = true;
 	        }
@@ -96,7 +164,7 @@ public class OneLock extends ProtocolSupport{
 			
 		}
 		
-		boolean getLocked(){
+		boolean isLocked(){
 			
 			return locked;
 			
@@ -105,3 +173,4 @@ public class OneLock extends ProtocolSupport{
 	}
 	
 }
+
