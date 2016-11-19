@@ -54,6 +54,7 @@ public class ActiveKeyValueStore extends AbstractConnectionWatcher {
 		
 		/** 将 ConfigWatcher 作为 watcher 注入，Stat 目的是获取元数据，这里不需要，所以设置为 null **/
 		/** 注意，这里会一直监听，直到有变化为止 **/
+		/** 好玩了，这里的方法是同步的，但是通过 watcher 又是异步的... **/
 		byte[] data = zk.getData( path, watcher, null/* stat */ );
 		
 		return new String(data, CHARSET);
