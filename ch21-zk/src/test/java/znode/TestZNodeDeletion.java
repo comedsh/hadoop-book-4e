@@ -9,7 +9,7 @@ import org.junit.Test;
 import common.ZNodeDeletion;
 import common.ZooKeeperGenerator;
 
-public class TestDeletionNode {
+public class TestZNodeDeletion {
 	
 	@Test
 	public void testDeleteNode() throws IOException, InterruptedException, KeeperException{
