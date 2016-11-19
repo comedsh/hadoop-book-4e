@@ -24,6 +24,8 @@ public class ZNodeDeletion {
 	 *    
 	 * 2、zk.getChild(path...) 返回的路径是不包含 "/" 目录符号前缀的，必须手动添加。
 	 * 
+	 * 
+	 * 
 	 * @param path
 	 * @param zk
 	 * @throws KeeperException
