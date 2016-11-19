@@ -32,6 +32,7 @@ public class DeleteGroup extends AbstractConnectionWatcher {
 			
 			for (String child : children) {
 				
+				/** 可见 child 只会返回当前自己的节点目录名，不会包含其父类的节点目录名 **/
 				zk.delete(path + "/" + child, -1);
 				
 			}
@@ -59,7 +60,7 @@ public class DeleteGroup extends AbstractConnectionWatcher {
 		
 		deleteGroup.connect("localhost");
 		
-		deleteGroup.delete("zoo");
+		deleteGroup.delete("dubbo");
 		
 		deleteGroup.close();
 		
